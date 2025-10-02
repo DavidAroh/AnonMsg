@@ -29,13 +29,72 @@ export default function MediaExpirationMonitor() {
   const fetchMediaStatus = async () => {
     try {
       setError(null);
+      
+      // Query message_media table directly since the view might not exist yet
       const { data, error } = await supabase
-        .from('media_expiration_status')
-        .select('*')
-        .order('expires_at', { ascending: true });
+        .from('message_media')
+        .select('id, file_path, created_at, expires_at')
+        .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setMediaStatus(data || []);
+      if (error) {
+        // If expires_at column doesn't exist, try without it
+        if (error.message.includes('expires_at')) {
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('message_media')
+            .select('id, file_path, created_at')
+            .order('created_at', { ascending: false });
+          
+          if (fallbackError) throw fallbackError;
+          
+          // Process without expires_at (assume 1 hour from created_at)
+          const processedData = (fallbackData || []).map(media => {
+            const now = new Date();
+            const createdAt = new Date(media.created_at);
+            const expiresAt = new Date(createdAt.getTime() + 60 * 60 * 1000); // 1 hour
+            const timeRemaining = expiresAt.getTime() - now.getTime();
+            
+            let status: 'EXPIRED' | 'EXPIRING_SOON' | 'ACTIVE' = 'ACTIVE';
+            if (timeRemaining <= 0) {
+              status = 'EXPIRED';
+            } else if (timeRemaining <= 10 * 60 * 1000) { // 10 minutes
+              status = 'EXPIRING_SOON';
+            }
+            
+            return {
+              ...media,
+              expires_at: expiresAt.toISOString(),
+              status,
+              time_remaining: formatDuration(timeRemaining)
+            };
+          });
+          
+          setMediaStatus(processedData);
+          return;
+        }
+        throw error;
+      }
+      
+      // Process the data to add status and time_remaining
+      const processedData = (data || []).map(media => {
+        const now = new Date();
+        const expiresAt = new Date(media.expires_at || new Date(media.created_at).getTime() + 60 * 60 * 1000);
+        const timeRemaining = expiresAt.getTime() - now.getTime();
+        
+        let status: 'EXPIRED' | 'EXPIRING_SOON' | 'ACTIVE' = 'ACTIVE';
+        if (timeRemaining <= 0) {
+          status = 'EXPIRED';
+        } else if (timeRemaining <= 10 * 60 * 1000) { // 10 minutes
+          status = 'EXPIRING_SOON';
+        }
+        
+        return {
+          ...media,
+          status,
+          time_remaining: formatDuration(timeRemaining)
+        };
+      });
+      
+      setMediaStatus(processedData);
     } catch (err: any) {
       setError(err.message);
       console.error('Error fetching media status:', err);
@@ -44,23 +103,90 @@ export default function MediaExpirationMonitor() {
     }
   };
 
+  const formatDuration = (ms: number): string => {
+    if (ms <= 0) return '-00:00:00';
+    
+    const hours = Math.floor(ms / (1000 * 60 * 60));
+    const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((ms % (1000 * 60)) / 1000);
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
   const runManualCleanup = async () => {
     try {
       setCleanupLoading(true);
       setError(null);
 
-      const { data, error } = await supabase
-        .rpc('cleanup_expired_media_manual');
+      // Try to use the database function first
+      let result: CleanupResult;
+      
+      try {
+        const { data, error } = await supabase
+          .rpc('cleanup_expired_media_manual');
 
-      if (error) throw error;
+        if (error) throw error;
 
-      const result: CleanupResult = {
-        success: true,
-        deletedCount: data?.[0]?.deleted_count || 0,
-        totalExpired: data?.[0]?.deleted_count || 0,
-        errors: null,
-        timestamp: new Date().toISOString()
-      };
+        result = {
+          success: true,
+          deletedCount: data?.[0]?.deleted_count || 0,
+          totalExpired: data?.[0]?.deleted_count || 0,
+          errors: null,
+          timestamp: new Date().toISOString()
+        };
+      } catch (dbError: any) {
+        // If database function doesn't exist, do manual cleanup
+        console.log('Database function not available, doing manual cleanup');
+        
+        // Get expired media
+        const { data: expiredMedia, error: fetchError } = await supabase
+          .from('message_media')
+          .select('id, file_path, thumbnail_path')
+          .lt('expires_at', new Date().toISOString());
+
+        if (fetchError) throw fetchError;
+
+        let deletedCount = 0;
+        const errors: string[] = [];
+
+        // Delete each expired media file
+        for (const media of expiredMedia || []) {
+          try {
+            // Delete from storage if file_path exists
+            if (media.file_path) {
+              const { error: storageError } = await supabase.storage
+                .from('message-media')
+                .remove([media.file_path]);
+              
+              if (storageError) {
+                errors.push(`Storage deletion failed for ${media.file_path}: ${storageError.message}`);
+              }
+            }
+
+            // Delete database record
+            const { error: deleteError } = await supabase
+              .from('message_media')
+              .delete()
+              .eq('id', media.id);
+
+            if (deleteError) {
+              errors.push(`Database deletion failed for ${media.id}: ${deleteError.message}`);
+            } else {
+              deletedCount++;
+            }
+          } catch (mediaError: any) {
+            errors.push(`Error processing media ${media.id}: ${mediaError.message}`);
+          }
+        }
+
+        result = {
+          success: true,
+          deletedCount,
+          totalExpired: expiredMedia?.length || 0,
+          errors: errors.length > 0 ? errors : null,
+          timestamp: new Date().toISOString()
+        };
+      }
 
       setLastCleanup(result);
       
@@ -68,7 +194,7 @@ export default function MediaExpirationMonitor() {
       await fetchMediaStatus();
       
     } catch (err: any) {
-      setError(err.message);
+      setError(`Cleanup failed: ${err.message}`);
       console.error('Error running cleanup:', err);
     } finally {
       setCleanupLoading(false);
