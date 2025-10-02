@@ -273,7 +273,7 @@ export default function Dashboard() {
 
         {/* Media Auto-Delete Monitor */}
         <MediaExpirationMonitor />
-
+        <br/>
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700 overflow-hidden">
           <div className="border-b border-slate-700 p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
