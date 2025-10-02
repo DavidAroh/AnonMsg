@@ -18,13 +18,19 @@ export default function PublicProfile() {
   const [rateLimitError, setRateLimitError] = useState('');
 
   useEffect(() => {
+    console.log('PublicProfile mounted, handle:', handle);
     if (handle) {
       loadProfile();
+    } else {
+      console.log('No handle provided');
+      setLoading(false);
+      setError('No handle provided in URL');
     }
   }, [handle]);
 
   const loadProfile = async () => {
     try {
+      console.log('Loading profile for handle:', handle);
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -32,10 +38,16 @@ export default function PublicProfile() {
         .eq('is_active', true)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+      
+      console.log('Profile data:', data);
       setProfile(data);
     } catch (err) {
       console.error('Error loading profile:', err);
+      setError('Failed to load profile. Please check your connection.');
     } finally {
       setLoading(false);
     }
@@ -137,18 +149,19 @@ export default function PublicProfile() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
         <div className="text-white">Loading...</div>
       </div>
     );
   }
 
-  if (!profile) {
+  if (error) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center px-4">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-white mb-4">Profile Not Found</h1>
-          <p className="text-slate-400 mb-8">This handle doesn't exist or is not active.</p>
+          <AlertCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
+          <h1 className="text-4xl font-bold text-white mb-4">Error</h1>
+          <p className="text-slate-400 mb-4">{error}</p>
+          <p className="text-slate-500 text-sm mb-8">Handle: {handle || 'Not provided'}</p>
           <Link
             to="/"
             className="inline-block px-6 py-3 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
@@ -157,15 +170,27 @@ export default function PublicProfile() {
           </Link>
         </div>
       </div>
-  );
+    </div>
+    );
+  }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      <div className="container mx-auto px-4 py-6 sm:py-8 max-w-2xl">
-        <div className="text-center mb-6 sm:mb-8">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <MessageCircle className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400" />
-            <span className="text-xl sm:text-2xl font-bold text-white">AnonMsg</span>
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center px-4">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-white mb-4">Profile Not Found</h1>
+          <p className="text-slate-400 mb-4">This handle doesn't exist or is not active.</p>
+          <p className="text-slate-500 text-sm mb-8">Handle: {handle}</p>
+          <Link
+            to="/"
+            className="inline-block px-6 py-3 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
+          >
+            Go Home
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
             Send a message to @{profile!.handle}
