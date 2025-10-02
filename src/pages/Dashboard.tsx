@@ -4,24 +4,24 @@ import {
   MessageCircle,
   Copy,
   Check,
-  Trash2,
   Settings,
   LogOut,
-  Image as ImageIcon,
-  Video,
-  AlertTriangle,
   ExternalLink,
   Eye,
+  Trash2,
+  AlertTriangle,
+  ImageIcon,
+  Video,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase, Profile, Message, MessageMedia } from '../lib/supabase';
+import { supabase, type Profile, type Message, type MessageMedia } from '../lib/supabase';
 import { formatTimeAgo } from '../lib/utils';
 import MessageModal from '../components/MessageModal';
+import MediaExpirationMonitor from '../components/MediaExpirationMonitor';
 
 type MessageWithMedia = Message & {
   media: MessageMedia[];
 };
-
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [messages, setMessages] = useState<MessageWithMedia[]>([]);
@@ -270,6 +270,9 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+
+        {/* Media Auto-Delete Monitor */}
+        <MediaExpirationMonitor />
 
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700 overflow-hidden">
           <div className="border-b border-slate-700 p-4 sm:p-6">
