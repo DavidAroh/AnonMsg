@@ -5,7 +5,6 @@ import ProfileSetup from './pages/ProfileSetup';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import PublicProfile from './pages/PublicProfile';
-import Setup from './pages/Setup';
 
 function App() {
   return (
@@ -16,7 +15,6 @@ function App() {
           <Route path="/setup" element={<ProfileSetup />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/db-setup" element={<Setup />} />
           <Route path="/:handle" element={<PublicProfile />} />
         </Routes>
       </AuthProvider>
