@@ -93,7 +93,7 @@ export default function Landing() {
 
             <div className="bg-slate-800/50 backdrop-blur-sm p-6 sm:p-8 rounded-2xl border border-slate-700">
               <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6">
-                {isSignUp ? 'Create Your Account' : 'Welcome Back'}
+                {isSignUp ? 'Create Your Account' : 'Welcome'}
               </h2>
 
               <form onSubmit={handleSubmit} className="space-y-4">
